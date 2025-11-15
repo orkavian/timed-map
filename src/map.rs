@@ -149,7 +149,7 @@ where
         }
     }
 
-    fn iter(&self) -> GenericMapIter<K, V> {
+    fn iter(&self) -> GenericMapIter<'_, K, V> {
         match self {
             Self::BTreeMap(inner) => GenericMapIter::BTreeMap(inner.iter()),
             #[cfg(feature = "std")]
@@ -169,7 +169,7 @@ where
         }
     }
 
-    fn iter_mut(&mut self) -> GenericMapIterMut<K, V> {
+    fn iter_mut(&mut self) -> GenericMapIterMut<'_, K, V> {
         match self {
             Self::BTreeMap(inner) => GenericMapIterMut::BTreeMap(inner.iter_mut()),
             #[cfg(feature = "std")]
