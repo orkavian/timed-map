@@ -462,16 +462,8 @@ where
     pub fn len_expired(&self) -> usize {
         let now = self.clock.elapsed_seconds_since_creation();
         self.expiries
-            .iter()
-            .filter_map(
-                |(exp, keys)| {
-                    if exp <= &now {
-                        Some(keys.len())
-                    } else {
-                        None
-                    }
-                },
-            )
+            .range(..=now)
+            .map(|(_exp, keys)| keys.len())
             .sum()
     }
 
