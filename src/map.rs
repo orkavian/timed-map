@@ -1,6 +1,6 @@
 use super::*;
 
-use crate::iter::{GenericMapIntoIter, GenericMapIter, GenericMapIterMut};
+use crate::iter::{GenericMapIntoIter, GenericMapIter, GenericMapIterMut, IntoIter, Iter, IterMut};
 
 macro_rules! cfg_std_feature {
     ($($item:item)*) => {
@@ -241,22 +241,14 @@ where
     C: Clock,
 {
     type Item = (&'a K, &'a V);
-    type IntoIter = IntoIter<(&'a K, &'a V)>;
+    type IntoIter = Iter<'a, K, V>;
 
     fn into_iter(self) -> Self::IntoIter {
         let now = self.clock.elapsed_seconds_since_creation();
-        let items: Vec<(&K, &V)> = self
-            .map
-            .iter()
-            .filter_map(|(k, v)| {
-                if !v.is_expired(now) {
-                    Some((k, v.value()))
-                } else {
-                    None
-                }
-            })
-            .collect();
-        items.into_iter()
+        Iter {
+            inner: self.map.iter(),
+            now,
+        }
     }
 }
 
@@ -266,22 +258,14 @@ where
     C: Clock,
 {
     type Item = (&'a K, &'a mut V);
-    type IntoIter = IntoIter<(&'a K, &'a mut V)>;
+    type IntoIter = IterMut<'a, K, V>;
 
     fn into_iter(self) -> Self::IntoIter {
         let now = self.clock.elapsed_seconds_since_creation();
-        let items: Vec<(&K, &mut V)> = self
-            .map
-            .iter_mut()
-            .filter_map(|(k, v)| {
-                if !v.is_expired(now) {
-                    Some((k, v.value_mut()))
-                } else {
-                    None
-                }
-            })
-            .collect();
-        items.into_iter()
+        IterMut {
+            inner: self.map.iter_mut(),
+            now,
+        }
     }
 }
 
@@ -291,22 +275,14 @@ where
     C: Clock,
 {
     type Item = (K, V);
-    type IntoIter = IntoIter<(K, V)>;
+    type IntoIter = IntoIter<K, V>;
 
     fn into_iter(self) -> Self::IntoIter {
         let now = self.clock.elapsed_seconds_since_creation();
-        let items: Vec<(K, V)> = self
-            .map
-            .into_iter()
-            .filter_map(|(k, v)| {
-                if !v.is_expired(now) {
-                    Some((k.clone(), v.owned_value()))
-                } else {
-                    None
-                }
-            })
-            .collect();
-        items.into_iter()
+        IntoIter {
+            inner: self.map.into_iter(),
+            now,
+        }
     }
 }
 
@@ -630,15 +606,8 @@ where
     }
 
     /// Returns an iterator over non-expired key-value pairs.
-    pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
-        let now = self.clock.elapsed_seconds_since_creation();
-        self.map.iter().filter_map(move |(k, v)| {
-            if !v.is_expired(now) {
-                Some((k, v.value()))
-            } else {
-                None
-            }
-        })
+    pub fn iter(&self) -> Iter<'_, K, V> {
+        self.into_iter()
     }
 
     /// Returns an iterator over all key-value pairs, including expired ones.
@@ -647,15 +616,8 @@ where
     }
 
     /// Returns a mutable iterator over non-expired key-value pairs.
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&K, &mut V)> {
-        let now = self.clock.elapsed_seconds_since_creation();
-        self.map.iter_mut().filter_map(move |(k, v)| {
-            if !v.is_expired(now) {
-                Some((k, v.value_mut()))
-            } else {
-                None
-            }
-        })
+    pub fn iter_mut(&mut self) -> IterMut<'_, K, V> {
+        self.into_iter()
     }
 
     /// Returns a mutable iterator over all key-value pairs, including expired ones.
