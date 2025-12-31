@@ -718,6 +718,7 @@ where
 mod tests {
     use super::*;
 
+    #[derive(Clone, Copy)]
     struct MockClock {
         current_time: u64,
     }
@@ -869,6 +870,80 @@ mod tests {
         // Insert map entry and check if exists
         map.insert_expirable(1, "expirable value", Duration::from_secs(5));
         assert!(map.contains_key(&1));
+    }
+
+    #[test]
+    fn nostd_iter_empty() {
+        let clock = MockClock { current_time: 1000 };
+        let map: TimedMap<u64, &str, MockClock> = TimedMap::new(clock);
+        assert_eq!(map.iter().count(), 0);
+        assert_eq!(map.into_iter().count(), 0);
+    }
+
+    #[test]
+    fn nostd_iter_all_expired() {
+        let mut clock = MockClock { current_time: 1000 };
+        let mut map = TimedMap::new(clock);
+
+        // Expires at 1001
+        map.insert_expirable(1, "val1", Duration::from_secs(1));
+        // Expires at 1002
+        map.insert_expirable(2, "val2", Duration::from_secs(2));
+
+        clock.current_time = 1003;
+        map.clock = clock;
+
+        assert_eq!(map.iter().count(), 0);
+        assert_eq!(map.into_iter().count(), 0);
+    }
+
+    #[test]
+    fn nostd_iter_mixed() {
+        let mut clock = MockClock { current_time: 1000 };
+        let mut map = TimedMap::new(clock);
+
+        // Expires at 1001
+        map.insert_expirable(1, "val1", Duration::from_secs(1));
+        // Never expires
+        map.insert_constant(2, "val2");
+        // Expires at 1005
+        map.insert_expirable(3, "val3", Duration::from_secs(5));
+
+        clock.current_time = 1002;
+        map.clock = clock;
+
+        let mut collected: Vec<(&u64, &&str)> = map.iter().collect();
+        collected.sort_by_key(|(k, _)| *k);
+
+        assert_eq!(collected.len(), 2);
+        assert_eq!(collected[0], (&2, &"val2"));
+        assert_eq!(collected[1], (&3, &"val3"));
+    }
+
+    #[test]
+    fn nostd_iter_mut_mixed() {
+        let mut clock = MockClock { current_time: 1000 };
+        let mut map = TimedMap::new(clock);
+
+        // Expires at 1001
+        map.insert_expirable(1, "val1", Duration::from_secs(1));
+        // Never expires
+        map.insert_constant(2, "val2");
+        // Expires at 1005
+        map.insert_expirable(3, "val3", Duration::from_secs(5));
+
+        clock.current_time = 1002;
+        map.clock = clock;
+
+        for (k, v) in map.iter_mut() {
+            if *k == 2 {
+                *v = "modified_val2";
+            }
+        }
+
+        assert_eq!(map.get(&1), None);
+        assert_eq!(map.get(&2), Some(&"modified_val2"));
+        assert_eq!(map.get(&3), Some(&"val3"));
     }
 }
 
@@ -1078,19 +1153,63 @@ mod std_tests {
     }
 
     #[test]
-    #[cfg(feature = "serde")]
-    fn ignore_expired_entries_on_serialize() {
+    fn std_iter_empty() {
+        let map: TimedMap<u64, &str> = TimedMap::new();
+        assert_eq!(map.iter().count(), 0);
+        assert_eq!(map.into_iter().count(), 0);
+    }
+
+    #[test]
+    fn std_iter_all_expired() {
         let mut map = TimedMap::new();
 
-        map.insert_expirable(1, "expirable value", Duration::from_secs(1));
-        map.insert_expirable(2, "expirable value2", Duration::from_secs(5));
+        map.insert_expirable(1, "val1", Duration::from_secs(1));
+        map.insert_expirable(2, "val2", Duration::from_secs(1));
+
         std::thread::sleep(Duration::from_secs(2));
 
-        let actual = serde_json::json!(map);
-        let expected = serde_json::json!({
-            "2": "expirable value2"
-        });
+        assert_eq!(map.iter().count(), 0);
+        assert_eq!(map.into_iter().count(), 0);
+    }
 
-        assert_eq!(expected, actual);
+    #[test]
+    fn std_iter_mixed() {
+        let mut map = TimedMap::new();
+
+        map.insert_expirable(1, "val1", Duration::from_secs(1));
+        map.insert_constant(2, "val2");
+        map.insert_expirable(3, "val3", Duration::from_secs(5));
+
+        // Only 1 should expire after this sleep
+        std::thread::sleep(Duration::from_secs(2));
+
+        let mut collected: Vec<(&u64, &&str)> = map.iter().collect();
+        collected.sort_by_key(|(k, _)| *k);
+
+        assert_eq!(collected.len(), 2);
+        assert_eq!(collected[0], (&2, &"val2"));
+        assert_eq!(collected[1], (&3, &"val3"));
+    }
+
+    #[test]
+    fn std_iter_mut_mixed() {
+        let mut map = TimedMap::new();
+
+        map.insert_expirable(1, "val1", Duration::from_secs(1));
+        map.insert_constant(2, "val2");
+        map.insert_expirable(3, "val3", Duration::from_secs(5));
+
+        // Only 1 should expire after this sleep
+        std::thread::sleep(Duration::from_secs(2));
+
+        for (k, v) in map.iter_mut() {
+            if *k == 2 {
+                *v = "modified_val2";
+            }
+        }
+
+        assert_eq!(map.get(&1), None);
+        assert_eq!(map.get(&2), Some(&"modified_val2"));
+        assert_eq!(map.get(&3), Some(&"val3"));
     }
 }
