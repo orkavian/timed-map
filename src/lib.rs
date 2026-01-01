@@ -92,7 +92,7 @@
 //! ```rs
 //! use timed_map::TimedMap;
 //!
-//! let mut map = TimedMap::new().expiration_tick_cap(500);
+//! let mut map = TimedMap::new().expiration_tick_cap(100);
 //! ```
 
 #![no_std]
